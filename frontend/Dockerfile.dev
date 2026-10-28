@@ -1,0 +1,9 @@
+FROM node:20-alpine
+
+ENV NEXT_TELEMETRY_DISABLED=1
+
+WORKDIR /work/frontend
+
+EXPOSE 3000
+
+CMD ["sh", "-c", "if [ -d .next ]; then find .next -mindepth 1 -delete 2>/dev/null || true; fi && npm install && npm run dev -- --hostname 0.0.0.0 --port 3000"]

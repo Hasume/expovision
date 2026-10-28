@@ -1,0 +1,114 @@
+# Local development stack: Postgres, Redis, FastAPI (hot reload) and Next.js (hot reload).
+# Usage: cp .env.example .env && docker compose up --build
+# Host ports can be changed in .env (POSTGRES_PORT, REDIS_PORT, API_PORT, WEB_PORT).
+
+name: expovision-dev
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: intensive
+      POSTGRES_PASSWORD: intensive
+      POSTGRES_DB: intensive
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U intensive -d intensive"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend-fastapi/Dockerfile.dev
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./backend-fastapi:/app
+      - uploads:/app/uploads
+    environment:
+      DATABASE_URL: postgresql://intensive:intensive@postgres:5432/intensive
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-change-me-min-32-chars!!}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-me-min-32!!}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin12345!}
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:3000}
+      PASSWORD_RESET_RETURN_TOKEN_IN_RESPONSE: ${PASSWORD_RESET_RETURN_TOKEN_IN_RESPONSE:-false}
+      # Optional AI assistance; leave the key empty to run without it.
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GOOGLE_GEMINI_MODEL: ${GOOGLE_GEMINI_MODEL:-gemini-2.5-flash}
+      # Optional Kinescope video hosting; leave the token empty to run without it.
+      KINESCOPE_API_TOKEN: ${KINESCOPE_API_TOKEN:-}
+      KINESCOPE_PROJECT_ID: ${KINESCOPE_PROJECT_ID:-}
+      KINESCOPE_WEBINAR_RECORDINGS_FOLDER_ID: ${KINESCOPE_WEBINAR_RECORDINGS_FOLDER_ID:-}
+      KINESCOPE_LIVE_PROJECT_ID: ${KINESCOPE_LIVE_PROJECT_ID:-}
+      KINESCOPE_LIVE_PARENT_ID: ${KINESCOPE_LIVE_PARENT_ID:-}
+      KINESCOPE_WEBHOOK_SECRET: ${KINESCOPE_WEBHOOK_SECRET:-}
+      UPLOAD_DIR: /app/uploads/certificates
+    ports:
+      - "${API_PORT:-4000}:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command:
+      [
+        "sh",
+        "-c",
+        "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 4000 --reload",
+      ]
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.dev
+    restart: unless-stopped
+    working_dir: /work/frontend
+    volumes:
+      - ./:/work
+      # npm workspaces hoist packages to the repo root; keep them in volumes, not on the host.
+      - workspace_node_modules:/work/node_modules
+      - frontend_node_modules:/work/frontend/node_modules
+      # Next.js builds only inside the container; a host .next directory breaks the dev server.
+      - frontend_next:/work/frontend/.next
+    environment:
+      # URL of the API as seen by the browser.
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:4000}
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  pgdata:
+  redisdata:
+  uploads:
+  workspace_node_modules:
+  frontend_node_modules:
+  frontend_next:

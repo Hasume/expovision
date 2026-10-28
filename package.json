@@ -1,0 +1,20 @@
+{
+  "name": "it-ai-intensive-platform",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "frontend",
+    "shared/contracts"
+  ],
+  "scripts": {
+    "docker:dev": "docker compose up -d --build --remove-orphans",
+    "docker:dev:down": "docker compose down",
+    "fastapi:install": "python3 -m pip install -r backend-fastapi/requirements.txt",
+    "fastapi:dev": "uvicorn app.main:app --reload --host 0.0.0.0 --port 4000 --app-dir backend-fastapi",
+    "fastapi:migrate": "alembic -c backend-fastapi/alembic.ini upgrade head",
+    "fastapi:test": "pytest -q backend-fastapi/tests",
+    "dev:frontend": "npm run dev -w frontend",
+    "dev:frontend:stable": "rm -rf frontend/.next && npm run dev -w frontend",
+    "build": "npm run build -w shared/contracts && npm run build -w frontend"
+  }
+}
